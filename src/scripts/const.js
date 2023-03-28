@@ -1,0 +1,1 @@
+export const PROCESS = ['预收中', '更新中', '已完结', '坑'];
