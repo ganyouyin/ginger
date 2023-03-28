@@ -1,29 +1,29 @@
-# vue-project
+# 姜饼码字器（ginger）
 
-This template should help get you started developing with Vue 3 in Vite.
+单机码字神器。
 
-## Recommended IDE Setup
+# 开发指南
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vitejs.dev/config/).
-
-## Project Setup
+## 初始化
 
 ```sh
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+## 本地开发
 
 ```sh
 npm run dev
 ```
 
-### Compile and Minify for Production
+## 发布预备
 
 ```sh
 npm run build
+```
+
+## 预览效果
+
+```sh
+npm run preview
 ```
