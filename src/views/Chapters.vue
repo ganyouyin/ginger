@@ -6,6 +6,7 @@ import Books from '../components/Books.vue';
 
 import { ElButton, ElLoading } from 'element-plus'
 import {
+    Plus,
     Folder,
     Tickets,
     Switch,
@@ -15,7 +16,8 @@ import {
     Close,
     HotWater,
     ArrowLeft,
-    ArrowRight
+    ArrowRight,
+    Memo
 } from '@element-plus/icons-vue';
 
 import 'element-plus/es/components/button/style/css';
@@ -35,6 +37,10 @@ import {
     editChapterName,
     getChapterHistory,
     revertChapterHistory,
+    getBookNotes,
+    addBookNote,
+    editBookNote,
+    deleteBookNote,
 } from '../scripts/store.js';
 
 import {
@@ -329,6 +335,89 @@ async function doAddChapter() {
     await openChapter(value.cid);
 
     selectChapter(value.cid);
+}
+
+/**
+ * 备忘笔记等
+ */
+const notesDialogVisible = ref(null);
+const notes = ref(null);
+async function openNotesDialog() {
+    const result = await getBookNotes(bid);
+
+    notes.value = result;
+
+    notesDialogVisible.value = true;
+}
+
+const noteDialogVisible = ref(false);
+const noteDialogMode = ref(null);
+const noteName = ref(null);
+const noteValue = ref(null);
+const currentNote = ref(null);
+function openAddNoteDialog() {
+    noteDialogMode.value = 'add';
+
+    noteName.value = '';
+    noteValue.value = '';
+    currentNote.value = null;
+
+    noteDialogVisible.value = true;
+}
+function openEditNoteDialog(note) {
+    if (!note) {
+        return;
+    }
+
+    noteDialogMode.value = 'edit';
+
+    noteName.value = note.name;
+    noteValue.value = note.value;
+    currentNote.value = note;
+
+    noteDialogVisible.value = true;
+}
+async function onConfirmNoteDialog() {
+    if (!noteName.value || !noteValue.value) {
+        ElMessage.info('笔记的标题和内容不可以为空。')
+        return;
+    }
+
+    if (noteDialogMode.value === 'add') {
+        const note = await addBookNote(bid, { name: noteName.value, value: noteValue.value });
+
+        notes.value || (notes.value = []);
+        notes.value.push(note);
+    } else if (currentNote.value && (noteName.value !== currentNote.value.name || noteValue.value !== currentNote.value.value)) {
+        await editBookNote(currentNote.value.nid, { name: noteName.value, value: noteValue.value });
+
+        currentNote.value.name = noteName.value;
+        currentNote.value.value = noteValue.value;
+    }
+
+    noteDialogVisible.value = false;
+}
+async function confirmDeleteNote(note) {
+    try {
+        await ElMessageBox.confirm(
+            `确认要删除笔记 ${note.name} 吗？删除后，将不可找回。`,
+            '删除确认',
+            {
+                confirmButtonText: '确认',
+                cancelButtonText: '取消',
+                type: 'warning',
+            }
+        );
+        await doDeleteNote(note);
+    } catch (ex) {
+        console.log(ex);
+    }
+}
+async function doDeleteNote(note) {
+    const index = notes.value.findIndex((one) => one.nid === note.nid);
+
+    await deleteBookNote(note.nid);
+    notes.value.splice(index, 1);
 }
 
 /**
@@ -703,7 +792,7 @@ function onEditorScroll() {
 
 <template>
     <el-container id="chapters" v-if="name">
-        <el-aside width="23rem" v-show="displaySidebar">
+        <el-aside width="22rem" v-show="displaySidebar">
             <el-card
                 class="box-card side-bar"
                 shadow="never"
@@ -737,6 +826,12 @@ function onEditorScroll() {
                                     @click="doAddChapter"
                                     >新建章</el-button
                                 >
+                                <el-button
+                                    class="notes"
+                                    @click="openNotesDialog"
+                                    :icon="Memo"
+                                    circle
+                                ></el-button>
                             </div>
                         </div>
                     </div>
@@ -950,10 +1045,82 @@ function onEditorScroll() {
             /></el-icon>
         </template>
     </el-dialog>
+    <el-dialog
+        v-model="notesDialogVisible"
+        title="灵感笔记"
+        width="42rem"
+        top="10vh"
+        class="notes-dialog"
+    >
+        <template v-if="notes && notes.length">
+            <div
+                v-for="note in notes"
+                class="note"
+                @dblclick="openEditNoteDialog(note)"
+            >
+                <div class="name">{{ note.name }}</div>
+                <div class="value">{{ note.value }}</div>
+                <el-icon @click="confirmDeleteNote(note)"><Delete /></el-icon>
+            </div>
+            <div class="add-note">
+                <el-icon @click="openAddNoteDialog"><Plus /></el-icon>
+            </div>
+        </template>
+        <template v-else>
+            <div class="empty-context">
+                <el-icon><HotWater /></el-icon>
+                你还没有添加任何笔记。
+                <el-button @click="openAddNoteDialog" type="primary"
+                    >去添加></el-button
+                >
+            </div>
+        </template>
+    </el-dialog>
+    <el-dialog
+        v-model="noteDialogVisible"
+        width="32rem"
+        top="10vh"
+        class="note-dialog"
+        :title="noteDialogMode === 'add' ? '添加笔记' : '编辑笔记'"
+    >
+        <el-row :gutter="20" align="middle">
+            <el-col :span="6">笔记名称</el-col>
+            <el-col :span="18"
+                ><el-input
+                    class="w-50 m-2"
+                    v-model="noteName"
+                    placeholder="请输入笔记名称（15字以内）"
+                    clearable
+                    :maxlength="15"
+            /></el-col>
+        </el-row>
+        <el-row :gutter="20" align="middle">
+            <el-col :span="6">笔记内容</el-col>
+            <el-col :span="18"
+                ><el-input
+                    class="w-50 m-2"
+                    v-model="noteValue"
+                    placeholder="请输入笔记内容"
+                    type="textarea"
+                    :rows="8"
+            /></el-col>
+        </el-row>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="noteDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="onConfirmNoteDialog">
+                    确认
+                </el-button>
+            </span>
+        </template>
+    </el-dialog>
 </template>
 
-
+<!-- 主页面样式 -->
 <style scoped>
+.el-row {
+    margin-bottom: 1rem;
+}
 .no-book-text {
     margin: 0 auto;
     vertical-align: middle;
@@ -964,6 +1131,7 @@ function onEditorScroll() {
     display: block;
     margin-bottom: 1rem;
 }
+
 #chapters {
     background: #dbdbdb;
     padding: 1rem;
@@ -987,7 +1155,9 @@ function onEditorScroll() {
 }
 
 .card-header .name {
-    font-size: 1.2rem;
+    font-size: 1rem;
+    display: inline-block;
+    max-width: 12rem;
 }
 
 .switch-book {
@@ -995,6 +1165,12 @@ function onEditorScroll() {
 }
 .card-header .operate {
     margin-top: 1rem;
+    overflow: hidden;
+    line-height: 1.8rem;
+}
+
+.card-header .operate .notes {
+    float: right;
 }
 
 .el-sub-menu .operate {
@@ -1002,6 +1178,7 @@ function onEditorScroll() {
     position: absolute;
     top: 0;
     right: 2rem;
+    background: var(--el-color-primary-light-9);
 }
 
 .el-sub-menu__title:hover > .operate {
@@ -1074,13 +1251,54 @@ function onEditorScroll() {
     border: none;
 }
 
-.history-dialog .empty-context {
-    width: 100%;
+.empty-context {
     text-align: center;
-    top: 50%;
-    position: absolute;
+    flex: 1;
+    align-self: center;
+}
+</style>
+
+<!-- 对话框相关，全局非scoped -->
+<style>
+.history-dialog,
+.switch-book-dialog,
+.notes-dialog {
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+    overflow: hidden;
+}
+.history-dialog .el-dialog__body,
+.switch-book-dialog .el-dialog__body,
+.notes-dialog .el-dialog__body {
+    flex: 1;
 }
 
+.switch-book-dialog .el-dialog__body,
+.notes-dialog .el-dialog__body {
+    overflow: auto;
+}
+
+.history-dialog {
+    min-height: 80vh;
+}
+
+.history-dialog .el-dialog__header {
+    display: none;
+}
+.history-dialog .el-dialog__body {
+    display: flex;
+    padding: 0;
+    overflow: hidden;
+    border-top: 1px solid #eee;
+}
+.notes-dialog {
+    text-align: center;
+}
+</style>
+
+<!-- 历史记录相关 -->
+<style scoped>
 .history-dialog .hide-dialog {
     position: absolute;
     top: 1rem;
@@ -1114,22 +1332,17 @@ function onEditorScroll() {
     overflow: hidden;
 }
 
-/* .history-dialog .content-wrapper .title .el-icon {
-    float: right;
-    cursor: pointer;
-} */
-
 .history-dialog .content-wrapper .content {
-    padding: 1rem;
-    background: var(--el-color-primary-light-10);
-    font-size: 1rem;
+    padding: 2rem;
+    background: #fafafa;
+    line-height: 2;
 }
 
 .history-dialog .revert-button {
     position: absolute;
     top: 5rem;
     right: 1rem;
-    background: var(--el-color-primary-light-10) !important;
+    background: #fafafa !important;
     padding: 0.5rem;
 }
 
@@ -1144,35 +1357,67 @@ function onEditorScroll() {
 }
 </style>
 
-
-<style>
-.history-dialog,
-.switch-book-dialog {
-    display: flex;
-    flex-direction: column;
-    max-height: 80vh;
+<!-- 笔记相关 -->
+<style scoped>
+.add-note {
+    display: inline-block;
+    width: 6rem;
+    height: 6rem;
+    margin: 0 6rem;
+    border: 1px dashed var(--el-border-color);
+    vertical-align: middle;
+    cursor: pointer;
+    margin-top: 2.5rem;
+}
+.add-note:hover {
+    border-color: var(--el-color-primary-light-3);
+}
+.add-note:hover .el-icon {
+    color: var(--el-color-primary-light-3);
+}
+.add-note .el-icon {
+    width: 100%;
+    height: 100%;
+    font-size: 28px;
+    color: #8c939d;
+}
+.note {
+    position: relative;
+    display: inline-block;
+    box-sizing: border-box;
+    width: 16rem;
+    margin: 1rem;
     overflow: hidden;
+    text-align: left;
+    vertical-align: middle;
+    user-select: none;
 }
-.history-dialog .el-dialog__body,
-.switch-book-dialog .el-dialog__body {
-    flex: 1;
+.note .name {
+    line-height: 3;
+    padding: 0 0.5rem;
 }
+.note .value {
+    height: 7rem;
+    border: 1rem solid var(--el-color-primary-light-9);
 
-.switch-book-dialog .el-dialog__body {
-    overflow: auto;
-}
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 4;
+    text-overflow: ellipsis;
+    -webkit-box-orient: vertical;
 
-.history-dialog {
-    min-height: 80vh;
+    background: var(--el-color-primary-light-9);
+    font-size: 0.8rem;
 }
-
-.history-dialog .el-dialog__header {
+.note .el-icon {
+    position: absolute;
+    right: 1rem;
+    bottom: 1rem;
+    background: var(--el-color-primary-light-9);
     display: none;
+    cursor: pointer;
 }
-.history-dialog .el-dialog__body {
-    display: flex;
-    padding: 0;
-    overflow: hidden;
-    border-top: 1px solid #eee;
+.note:hover .el-icon {
+    display: inline-block;
 }
 </style>

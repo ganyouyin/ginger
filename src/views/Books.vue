@@ -85,10 +85,10 @@ function onBookThumbChange(image) {
     const maxSize = 1 * 1024 * 1024;
 
     if (allowedTypes.indexOf(image.raw.type) < 0) {
-        ElMessage.error('书籍封面必须为 jpeg 或者 png 格式的图片！')
+        ElMessage.error('书籍封面必须为 jpeg 或者 png 格式的图片！');
         return false;
     } else if (image.size > maxSize) {
-        ElMessage.error('书籍封面的尺寸需要小于 1 MB ！')
+        ElMessage.error('书籍封面的尺寸需要小于 1 MB ！');
         return false;
     }
 

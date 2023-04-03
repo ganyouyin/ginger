@@ -178,19 +178,33 @@ async function insertHistory(data = {}) {
     await matainHistory(historyArray);
 }
 
+function shouldMerge(ctime1, ctime2) {
+    const time1 = new Date(ctime1);
+    const time2 = new Date(ctime2);
+    const minutes1 = time1.getMinutes();
+    const minutes2 = time2.getMinutes();
+
+    const value1 = Math.floor(minutes1 / 5);
+    const value2 = Math.floor(minutes2 / 5);
+
+    return value2 === value1;
+}
+
 /**
  * 整理历史记录，两条历史间隔不应低于 5min，历史总长度不应超过10
  * @param {Array} array 
  */
 async function matainHistory(array) {
+    const length = array.length;
     const lastHistory = array.pop();
     const secondLastHistory = array.pop();
 
-    if (secondLastHistory && lastHistory.ctime - secondLastHistory.ctime < 5 * 60 * 1000) {
-        await deleteData('history', secondLastHistory.hid);
-        await insertData('history', lastHistory);
-    } else if (array.length > 10) {
+    if (length > 10) {
         await deleteData('history', array[0].hid);
+    }
+
+    if (secondLastHistory && shouldMerge(lastHistory.ctime, secondLastHistory.ctime)) {
+        await deleteData('history', secondLastHistory.hid);
         await insertData('history', lastHistory);
     } else {
         await insertData('history', lastHistory);
@@ -200,13 +214,14 @@ async function matainHistory(array) {
 let db = null;
 
 const dbName = 'ginger';
-const dbVersion = 1;
+const dbVersion = 2;
 
 const stores = {
     books: ['bid', 'name', 'process', 'del'],
     rolls: ['rid', 'bid', 'name'],
     chapters: ['cid', 'rid', 'name'],
-    history: ['hid', 'cid']
+    history: ['hid', 'cid'],
+    notes: ['nid', 'bid']
 };
 
 export function openStore() {
@@ -228,9 +243,7 @@ export function openStore() {
     });
 }
 
-/**
- * 获取书籍列表的所有未删除书籍
- */
+// 书籍相关
 export async function getAllBooks(sortBy = 'mtime', desc = true) {
     const books = await getDataBy('books', 'del', 0);
     books.sort((a, b) => {
@@ -243,12 +256,6 @@ export async function getAllBooks(sortBy = 'mtime', desc = true) {
     });
     return books;
 }
-
-/**
- * 根据书本id，获取单本书籍信息。
- * @param {String} bid
- * @returns 
- */
 export async function getBookDetail(bid) {
     const book = await getData('books', bid);
 
@@ -266,19 +273,6 @@ export async function getBookDetail(bid) {
 
     return book;
 }
-
-/**
- * 获取书籍列表的所有已删除书籍
- */
-export async function getDeletedBooks() {
-    return await getDataBy('books', 'del', 1);
-}
-
-/**
- * 添加书籍
- * @param {Object} data 
- * @returns 
- */
 export async function addBook({ name, thumb, process }) {
     const time = Date.now();
     const cid = time, rid = time, bid = time;
@@ -294,7 +288,6 @@ export async function addBook({ name, thumb, process }) {
 
     return book;
 }
-
 export async function editBook(bid, { name, thumb, process }) {
     const time = Date.now();
     const book = await getData('books', bid);
@@ -306,7 +299,6 @@ export async function editBook(bid, { name, thumb, process }) {
 
     await editData('books', book);
 }
-
 export async function deleteBook(bid) {
     const book = await getData('books', bid);
     const time = Date.now();
@@ -316,7 +308,9 @@ export async function deleteBook(bid) {
 
     await editData('books', book);
 }
-
+export async function getDeletedBooks() {
+    return await getDataBy('books', 'del', 1);
+}
 export async function undoDeleteBook(bid) {
     const book = await getData('books', bid);
     const time = Date.now();
@@ -327,8 +321,7 @@ export async function undoDeleteBook(bid) {
     await editData('books', book);
 }
 
-
-
+// 卷相关
 export async function addRoll(bid, { name }) {
     const time = Date.now();
 
@@ -395,6 +388,7 @@ export async function deleteRoll(rid) {
     await editData('books', book);
 }
 
+// 章节相关
 export async function addChapter(rid, { name, value }) {
     const time = Date.now();
 
@@ -483,6 +477,8 @@ export async function editChapterValue(cid, newValue) {
 export async function editChapterName(cid, newName) {
     await editChapter(cid, { name: newName });
 }
+
+// 历史记录相关
 export async function getChapterHistory(cid) {
     return await getDataBy('history', 'cid', cid);
 }
@@ -509,4 +505,74 @@ export async function revertChapterHistory(cid, hid) {
     await editData('books', book);
 
     return true;
+}
+
+// 笔记备忘相关
+export async function getBookNotes(bid) {
+    return await getDataBy('notes', 'bid', bid);
+}
+export async function addBookNote(bid, {name, value}) {
+    if (!name || !value) {
+        return;
+    }
+
+    const time = Date.now();
+    const book = await getData('books', bid);
+
+    if (!book) {
+        return;
+    }
+
+    const note = {
+        bid,
+        nid: time,
+        name,
+        value,
+        ctime: time,
+        mtime: time
+    };
+
+    book.mtime = time;
+
+    await insertData('notes', note);
+    await editData('books', book);
+
+    return note;
+}
+export async function editBookNote(nid, {name, value}) {
+    if (!name || !value) {
+        return;
+    }
+
+    const time = Date.now();
+    const note = await getData('notes', nid);
+    const book = note && await getData('books', note.bid);
+
+    if (!book || (note.name === name && note.value === value)) {
+        return;
+    }
+
+    note.name = name;
+    note.value = value;
+    note.mtime = time;
+
+    book.mtime = time;
+
+    await editData('notes', note);
+    await editData('books', book);
+
+    return true;
+}
+export async function deleteBookNote(nid) {
+    const time = Date.now();
+    const note = await getData('notes', nid);
+    const book = note && await getData('books', note.bid);
+
+    if (!book) {
+        return;
+    }
+    book.mtime = time;
+
+    await editData('books', book);
+    await deleteData('notes', nid);
 }

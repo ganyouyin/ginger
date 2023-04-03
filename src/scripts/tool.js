@@ -18,6 +18,12 @@ export function formatDate(time, format = 'Y年M月D日') {
 }
 
 export function isFileEqual(file1, file2) {
+    if (file1 === file2) {
+        return true;
+    }
+    if (file1 === undefined || file2 === undefined) {
+        return false;
+    }
     return file1.name === file2.name && file1.type === file2.type && file1.size === file2.size && file1.lastModified === file2.lastModified;
 }
 
